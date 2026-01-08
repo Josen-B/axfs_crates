@@ -4,15 +4,33 @@ use axfs_vfs::{VfsDirEntry, VfsNodeAttr, VfsNodeOps, VfsNodeRef, VfsNodeType};
 use axfs_vfs::{VfsError, VfsResult};
 use spin::RwLock;
 
-/// The directory node in the device filesystem.
+/// The directory node in device filesystem.
 ///
-/// It implements [`axfs_vfs::VfsNodeOps`].
+/// This represents a directory that can contain device nodes.
+/// It implements VFS node operations trait to provide directory operations.
+///
+/// Device filesystem directories are read-only at runtime - devices
+/// must be registered at filesystem creation time.
+///
+/// # Fields
+///
+/// - `parent` - Weak reference to parent directory
+/// - `children` - Map of child node names to their references
 pub struct DirNode {
     parent: RwLock<Weak<dyn VfsNodeOps>>,
     children: RwLock<BTreeMap<&'static str, VfsNodeRef>>,
 }
 
 impl DirNode {
+    /// Creates a new directory node.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional reference to parent directory
+    ///
+    /// # Returns
+    ///
+    /// A new directory node wrapped in an Arc.
     pub(super) fn new(parent: Option<&VfsNodeRef>) -> Arc<Self> {
         let parent = parent.map_or(Weak::<Self>::new() as _, Arc::downgrade);
         Arc::new(Self {
@@ -21,11 +39,24 @@ impl DirNode {
         })
     }
 
+    /// Sets the parent directory for this directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional reference to parent directory node
     pub(super) fn set_parent(&self, parent: Option<&VfsNodeRef>) {
         *self.parent.write() = parent.map_or(Weak::<Self>::new() as _, Arc::downgrade);
     }
 
-    /// Create a subdirectory at this directory.
+    /// Creates a subdirectory at this directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the subdirectory to create
+    ///
+    /// # Returns
+    ///
+    /// A reference to the created directory node.
     pub fn mkdir(self: &Arc<Self>, name: &'static str) -> Arc<Self> {
         let parent = self.clone() as VfsNodeRef;
         let node = Self::new(Some(&parent));
@@ -33,21 +64,49 @@ impl DirNode {
         node
     }
 
-    /// Add a node to this directory.
+    /// Adds a device node to this directory.
+    ///
+    /// This is the primary method for registering devices in the filesystem.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the device node
+    /// * `node` - The device node reference to add
     pub fn add(&self, name: &'static str, node: VfsNodeRef) {
         self.children.write().insert(name, node);
     }
 }
 
 impl VfsNodeOps for DirNode {
+    /// Returns the attributes of this directory.
+    ///
+    /// # Returns
+    ///
+    /// Returns directory attributes with a fixed size of 4096 bytes.
     fn get_attr(&self) -> VfsResult<VfsNodeAttr> {
         Ok(VfsNodeAttr::new_dir(4096, 0))
     }
 
+    /// Returns the parent directory of this directory.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(VfsNodeRef)` if a parent exists, `None` otherwise.
     fn parent(&self) -> Option<VfsNodeRef> {
         self.parent.read().upgrade()
     }
 
+    /// Lookups a device node with the given path.
+    ///
+    /// This method supports path components including `.` and `..`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The relative path to lookup
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the found device node, or an error if not found.
     fn lookup(self: Arc<Self>, path: &str) -> VfsResult<VfsNodeRef> {
         let (name, rest) = split_path(path);
         let node = match name {
@@ -68,6 +127,19 @@ impl VfsNodeOps for DirNode {
         }
     }
 
+    /// Reads directory entries into the provided buffer.
+    ///
+    /// The first two entries are always `.` and `..`, followed by
+    /// the actual device nodes.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_idx` - The starting index for reading entries
+    /// * `dirents` - A mutable slice to store the directory entries
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of entries read on success.
     fn read_dir(&self, start_idx: usize, dirents: &mut [VfsDirEntry]) -> VfsResult<usize> {
         let children = self.children.read();
         let mut children = children.iter().skip(start_idx.max(2) - 2);
@@ -87,6 +159,23 @@ impl VfsNodeOps for DirNode {
         Ok(dirents.len())
     }
 
+    /// Creates a new node (not supported).
+    ///
+    /// This method is not supported in device filesystem as devices
+    /// must be registered at filesystem creation time.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path where node would be created
+    /// * `ty` - The type of node to create
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the node already exists, or an error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::PermissionDenied`] as dynamic creation is not supported.
     fn create(&self, path: &str, ty: VfsNodeType) -> VfsResult {
         log::debug!("create {ty:?} at devfs: {path}");
         let (name, rest) = split_path(path);
@@ -108,6 +197,22 @@ impl VfsNodeOps for DirNode {
         }
     }
 
+    /// Removes a node at the given path (not supported).
+    ///
+    /// This method is not supported in device filesystem as devices
+    /// cannot be removed at runtime.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path of the node to remove
+    ///
+    /// # Returns
+    ///
+    /// Returns an error as dynamic removal is not supported.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::PermissionDenied`] as dynamic removal is not supported.
     fn remove(&self, path: &str) -> VfsResult {
         log::debug!("remove at devfs: {path}");
         let (name, rest) = split_path(path);
@@ -130,6 +235,17 @@ impl VfsNodeOps for DirNode {
     axfs_vfs::impl_vfs_dir_default! {}
 }
 
+/// Splits a path into first component and the rest.
+///
+/// This helper function is used for path resolution.
+///
+/// # Arguments
+///
+/// * `path` - The path to split
+///
+/// # Returns
+///
+/// A tuple containing the first path component and an optional remainder.
 fn split_path(path: &str) -> (&str, Option<&str>) {
     let trimmed_path = path.trim_start_matches('/');
     trimmed_path.find('/').map_or((trimmed_path, None), |n| {

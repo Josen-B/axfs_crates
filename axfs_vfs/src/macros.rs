@@ -1,6 +1,11 @@
 /// When implement [`VfsNodeOps`] on a directory node, add dummy file operations
 /// that just return an error.
 ///
+/// This macro provides default implementations of file operations that return
+/// `AxError::IsADirectory` errors. It should be used when implementing
+/// `VfsNodeOps` for a directory node, as directories do not support file
+/// operations like `read_at`, `write_at`, `fsync`, and `truncate`.
+///
 /// [`VfsNodeOps`]: crate::VfsNodeOps
 #[macro_export]
 macro_rules! impl_vfs_dir_default {
@@ -30,6 +35,11 @@ macro_rules! impl_vfs_dir_default {
 
 /// When implement [`VfsNodeOps`] on a non-directory node, add dummy directory
 /// operations that just return an error.
+///
+/// This macro provides default implementations of directory operations that return
+/// `AxError::NotADirectory` errors. It should be used when implementing
+/// `VfsNodeOps` for a non-directory node (e.g., a file or device), as these nodes
+/// do not support directory operations like `lookup`, `create`, `remove`, and `read_dir`.
 ///
 /// [`VfsNodeOps`]: crate::VfsNodeOps
 #[macro_export]
