@@ -306,3 +306,178 @@ fn split_path(path: &str) -> (&str, Option<&str>) {
         (&trimmed_path[..n], Some(&trimmed_path[n + 1..]))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_path() {
+        assert_eq!(split_path("foo/bar"), ("foo", Some("bar")));
+        assert_eq!(split_path("foo"), ("foo", None));
+        assert_eq!(split_path("/foo/bar"), ("foo", Some("bar")));
+        assert_eq!(split_path("///foo/bar"), ("foo", Some("bar")));
+        assert_eq!(split_path(""), ("", None));
+        assert_eq!(split_path("/"), ("", None));
+        assert_eq!(split_path("///"), ("", None));
+    }
+
+    #[test]
+    fn test_dir_node_new() {
+        let dir = DirNode::new(None);
+        assert!(dir.get_entries().is_empty());
+        assert!(!dir.exist("test"));
+    }
+
+    #[test]
+    fn test_dir_node_exist() {
+        let dir = DirNode::new(None);
+        assert!(!dir.exist("test"));
+        assert!(!dir.exist("foo"));
+    }
+
+    #[test]
+    fn test_dir_node_create_file() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("test.txt", VfsNodeType::File).is_ok());
+        assert!(dir.exist("test.txt"));
+    }
+
+    #[test]
+    fn test_dir_node_create_dir() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("testdir", VfsNodeType::Dir).is_ok());
+        assert!(dir.exist("testdir"));
+    }
+
+    #[test]
+    fn test_dir_node_create_duplicate() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("test", VfsNodeType::File).is_ok());
+        assert_eq!(
+            dir.create_node("test", VfsNodeType::File).err(),
+            Some(VfsError::AlreadyExists)
+        );
+    }
+
+    #[test]
+    fn test_dir_node_create_unsupported() {
+        let dir = DirNode::new(None);
+        assert_eq!(
+            dir.create_node("test", VfsNodeType::SymLink).err(),
+            Some(VfsError::Unsupported)
+        );
+    }
+
+    #[test]
+    fn test_dir_node_remove_file() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("test.txt", VfsNodeType::File).is_ok());
+        assert!(dir.remove_node("test.txt").is_ok());
+        assert!(!dir.exist("test.txt"));
+    }
+
+    #[test]
+    fn test_dir_node_remove_empty_dir() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("testdir", VfsNodeType::Dir).is_ok());
+        assert!(dir.remove_node("testdir").is_ok());
+        assert!(!dir.exist("testdir"));
+    }
+
+    #[test]
+    fn test_dir_node_remove_not_empty_dir() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("testdir", VfsNodeType::Dir).is_ok());
+        let subdir = dir.clone().lookup("testdir").unwrap();
+        assert!(subdir.create("nested.txt", VfsNodeType::File).is_ok());
+        assert_eq!(
+            dir.remove_node("testdir").err(),
+            Some(VfsError::DirectoryNotEmpty)
+        );
+    }
+
+    #[test]
+    fn test_dir_node_remove_not_found() {
+        let dir = DirNode::new(None);
+        assert_eq!(dir.remove_node("nonexistent").err(), Some(VfsError::NotFound));
+    }
+
+    #[test]
+    fn test_dir_node_get_entries() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("f1", VfsNodeType::File).is_ok());
+        assert!(dir.create_node("f2", VfsNodeType::File).is_ok());
+        assert!(dir.create_node("d1", VfsNodeType::Dir).is_ok());
+        
+        let entries = dir.get_entries();
+        assert_eq!(entries.len(), 3);
+        assert!(entries.contains(&"f1".to_string()));
+        assert!(entries.contains(&"f2".to_string()));
+        assert!(entries.contains(&"d1".to_string()));
+    }
+
+    #[test]
+    fn test_dir_node_lookup_current() {
+        let dir = DirNode::new(None);
+        let current = dir.clone().lookup(".").unwrap();
+        assert!(current.get_attr().unwrap().is_dir());
+    }
+
+    #[test]
+    fn test_dir_node_lookup_file() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("test.txt", VfsNodeType::File).is_ok());
+        let file = dir.lookup("test.txt").unwrap();
+        assert!(file.get_attr().unwrap().is_file());
+    }
+
+    #[test]
+    fn test_dir_node_lookup_not_found() {
+        let dir = DirNode::new(None);
+        assert_eq!(dir.lookup("nonexistent").err(), Some(VfsError::NotFound));
+    }
+
+    #[test]
+    fn test_dir_node_parent_none() {
+        let dir = DirNode::new(None);
+        assert!(dir.parent().is_none());
+    }
+
+    #[test]
+    fn test_dir_node_get_attr() {
+        let dir = DirNode::new(None);
+        let attr = dir.get_attr().unwrap();
+        assert!(attr.is_dir());
+        assert_eq!(attr.size(), 4096);
+    }
+
+    #[test]
+    fn test_dir_node_create_with_path() {
+        let dir = DirNode::new(None);
+        // Create intermediate directory first
+        assert!(dir.create("subdir", VfsNodeType::Dir).is_ok());
+        assert!(dir.create("subdir/nested", VfsNodeType::Dir).is_ok());
+        assert!(dir.create("subdir/nested/file.txt", VfsNodeType::File).is_ok());
+        assert!(dir.exist("subdir"));
+    }
+
+    #[test]
+    fn test_dir_node_read_dir() {
+        let dir = DirNode::new(None);
+        assert!(dir.create_node("f1", VfsNodeType::File).is_ok());
+        assert!(dir.create_node("f2", VfsNodeType::Dir).is_ok());
+        
+        let mut entries: Vec<VfsDirEntry> = (0..10).map(|_| VfsDirEntry::default()).collect();
+        let count = dir.read_dir(0, &mut entries).unwrap();
+        assert!(count >= 3); // ., .., f1, f2
+        
+        // First entry should be "."
+        assert_eq!(entries[0].name_as_bytes(), b".");
+        assert_eq!(entries[0].entry_type(), VfsNodeType::Dir);
+        
+        // Second entry should be ".."
+        assert_eq!(entries[1].name_as_bytes(), b"..");
+        assert_eq!(entries[1].entry_type(), VfsNodeType::Dir);
+    }
+}

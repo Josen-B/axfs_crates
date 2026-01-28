@@ -4,6 +4,9 @@ use axfs_vfs::{VfsDirEntry, VfsNodeAttr, VfsNodeOps, VfsNodeRef, VfsNodeType};
 use axfs_vfs::{VfsError, VfsResult};
 use spin::RwLock;
 
+#[cfg(test)]
+use crate::NullDev;
+
 /// The directory node in device filesystem.
 ///
 /// This represents a directory that can contain device nodes.
@@ -251,4 +254,147 @@ fn split_path(path: &str) -> (&str, Option<&str>) {
     trimmed_path.find('/').map_or((trimmed_path, None), |n| {
         (&trimmed_path[..n], Some(&trimmed_path[n + 1..]))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::NullDev;
+
+    #[test]
+    fn test_split_path() {
+        assert_eq!(split_path("foo/bar"), ("foo", Some("bar")));
+        assert_eq!(split_path("foo"), ("foo", None));
+        assert_eq!(split_path("/foo/bar"), ("foo", Some("bar")));
+        assert_eq!(split_path(""), ("", None));
+        assert_eq!(split_path("/"), ("", None));
+        assert_eq!(split_path("///"), ("", None));
+    }
+
+    #[test]
+    fn test_dir_node_new() {
+        let dir = DirNode::new(None);
+        assert!(dir.parent().is_none());
+    }
+
+    #[test]
+    fn test_dir_node_mkdir() {
+        let dir = DirNode::new(None);
+        let subdir = dir.mkdir("subdir");
+        assert!(subdir.parent().is_some());
+        
+        // Check if subdir was added
+        let entries = dir.children.read();
+        assert!(entries.contains_key("subdir"));
+    }
+
+    #[test]
+    fn test_dir_node_add() {
+        let dir = DirNode::new(None);
+        let null_device: VfsNodeRef = Arc::new(NullDev);
+        dir.add("null", null_device);
+        
+        // Check if device was added
+        let entries = dir.children.read();
+        assert!(entries.contains_key("null"));
+    }
+
+    #[test]
+    fn test_dir_node_get_attr() {
+        let dir = DirNode::new(None);
+        let attr = dir.get_attr().unwrap();
+        assert!(attr.is_dir());
+        assert_eq!(attr.size(), 4096);
+    }
+
+    #[test]
+    fn test_dir_node_lookup_current() {
+        let dir = DirNode::new(None);
+        let current = dir.clone().lookup(".").unwrap();
+        assert!(current.get_attr().unwrap().is_dir());
+    }
+
+    #[test]
+    fn test_dir_node_lookup_device() {
+        let dir = DirNode::new(None);
+        let null_device: VfsNodeRef = Arc::new(NullDev);
+        dir.add("null", null_device);
+        
+        let device = dir.lookup("null").unwrap();
+        assert_eq!(device.get_attr().unwrap().file_type(), VfsNodeType::CharDevice);
+    }
+
+    #[test]
+    fn test_dir_node_lookup_not_found() {
+        let dir = DirNode::new(None);
+        assert_eq!(dir.lookup("nonexistent").err(), Some(VfsError::NotFound));
+    }
+
+    #[test]
+    fn test_dir_node_lookup_subdirectory() {
+        let dir = DirNode::new(None);
+        let subdir = dir.mkdir("subdir");
+        let null_device: VfsNodeRef = Arc::new(NullDev);
+        subdir.add("null", null_device);
+        
+        let device = dir.lookup("subdir/null").unwrap();
+        assert_eq!(device.get_attr().unwrap().file_type(), VfsNodeType::CharDevice);
+    }
+
+    #[test]
+    fn test_dir_node_read_dir_empty() {
+        let dir = DirNode::new(None);
+        let mut entries: Vec<VfsDirEntry> = (0..10).map(|_| VfsDirEntry::default()).collect();
+        let count = dir.read_dir(0, &mut entries).unwrap();
+        assert_eq!(count, 2); // . and ..
+        
+        assert_eq!(entries[0].name_as_bytes(), b".");
+        assert_eq!(entries[1].name_as_bytes(), b"..");
+    }
+
+    #[test]
+    fn test_dir_node_read_dir_with_devices() {
+        let dir = DirNode::new(None);
+        let null_device: VfsNodeRef = Arc::new(NullDev);
+        dir.add("null", null_device);
+        
+        let mut entries: Vec<VfsDirEntry> = (0..10).map(|_| VfsDirEntry::default()).collect();
+        let count = dir.read_dir(0, &mut entries).unwrap();
+        assert_eq!(count, 3); // ., .., null
+        
+        assert_eq!(entries[0].name_as_bytes(), b".");
+        assert_eq!(entries[1].name_as_bytes(), b"..");
+        assert_eq!(entries[2].name_as_bytes(), b"null");
+    }
+
+    #[test]
+    fn test_dir_node_create_not_supported() {
+        let dir = DirNode::new(None);
+        assert_eq!(
+            dir.create("newfile", VfsNodeType::File).err(),
+            Some(VfsError::PermissionDenied)
+        );
+    }
+
+    #[test]
+    fn test_dir_node_create_already_exists() {
+        let dir = DirNode::new(None);
+        let null_device: VfsNodeRef = Arc::new(NullDev);
+        dir.add("null", null_device);
+        
+        // Creating an existing node should return PermissionDenied
+        assert_eq!(
+            dir.create("null", VfsNodeType::File).err(),
+            Some(VfsError::PermissionDenied)
+        );
+    }
+
+    #[test]
+    fn test_dir_node_remove_not_supported() {
+        let dir = DirNode::new(None);
+        assert_eq!(
+            dir.remove("null").err(),
+            Some(VfsError::PermissionDenied)
+        );
+    }
 }

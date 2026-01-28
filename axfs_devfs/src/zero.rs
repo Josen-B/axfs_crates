@@ -82,3 +82,96 @@ impl VfsNodeOps for ZeroDev {
 
     axfs_vfs::impl_vfs_non_dir_default! {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zero_dev_get_attr() {
+        let zero = ZeroDev;
+        let attr = zero.get_attr().unwrap();
+        assert_eq!(attr.file_type(), VfsNodeType::CharDevice);
+        assert_eq!(attr.size(), 0);
+        assert_eq!(attr.blocks(), 0);
+    }
+
+    #[test]
+    fn test_zero_dev_read() {
+        let zero = ZeroDev;
+        let mut buf = [1; 100];
+        let read = zero.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 100);
+        // Buffer should be filled with zeros
+        assert_eq!(buf, [0; 100]);
+    }
+
+    #[test]
+    fn test_zero_dev_read_offset() {
+        let zero = ZeroDev;
+        let mut buf = [1; 50];
+        let read = zero.read_at(100, &mut buf).unwrap();
+        assert_eq!(read, 50);
+        // Offset is ignored, buffer should still be filled with zeros
+        assert_eq!(buf, [0; 50]);
+    }
+
+    #[test]
+    fn test_zero_dev_read_empty() {
+        let zero = ZeroDev;
+        let mut buf = [];
+        let read = zero.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 0);
+    }
+
+    #[test]
+    fn test_zero_dev_write() {
+        let zero = ZeroDev;
+        let data = b"Hello, World!";
+        let written = zero.write_at(0, data).unwrap();
+        assert_eq!(written, data.len());
+        // Data is discarded
+    }
+
+    #[test]
+    fn test_zero_dev_write_offset() {
+        let zero = ZeroDev;
+        let data = b"Test";
+        let written = zero.write_at(100, data).unwrap();
+        assert_eq!(written, data.len());
+    }
+
+    #[test]
+    fn test_zero_dev_write_empty() {
+        let zero = ZeroDev;
+        let data: &[u8] = &[];
+        let written = zero.write_at(0, data).unwrap();
+        assert_eq!(written, 0);
+    }
+
+    #[test]
+    fn test_zero_dev_truncate() {
+        let zero = ZeroDev;
+        assert!(zero.truncate(0).is_ok());
+        assert!(zero.truncate(100).is_ok());
+        assert!(zero.truncate(u64::MAX).is_ok());
+    }
+
+    #[test]
+    fn test_zero_dev_combined_operations() {
+        let zero = ZeroDev;
+        
+        // Write data (discarded)
+        let data = b"Test data";
+        zero.write_at(0, data).unwrap();
+        
+        // Truncate
+        zero.truncate(10).unwrap();
+        
+        // Read should return zeros
+        let mut buf = [1; 50];
+        let read = zero.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 50);
+        assert_eq!(buf, [0; 50]);
+    }
+}

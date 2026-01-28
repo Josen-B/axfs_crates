@@ -80,3 +80,87 @@ impl VfsNodeOps for NullDev {
 
     axfs_vfs::impl_vfs_non_dir_default! {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_null_dev_get_attr() {
+        let null = NullDev;
+        let attr = null.get_attr().unwrap();
+        assert_eq!(attr.file_type(), VfsNodeType::CharDevice);
+        assert_eq!(attr.size(), 0);
+        assert_eq!(attr.blocks(), 0);
+    }
+
+    #[test]
+    fn test_null_dev_read() {
+        let null = NullDev;
+        let mut buf = [0; 100];
+        let read = null.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 0);
+        // Buffer should remain unchanged
+        assert_eq!(buf, [0; 100]);
+    }
+
+    #[test]
+    fn test_null_dev_read_offset() {
+        let null = NullDev;
+        let mut buf = [1; 50];
+        let read = null.read_at(100, &mut buf).unwrap();
+        assert_eq!(read, 0);
+        // Buffer should remain unchanged
+        assert_eq!(buf, [1; 50]);
+    }
+
+    #[test]
+    fn test_null_dev_write() {
+        let null = NullDev;
+        let data = b"Hello, World!";
+        let written = null.write_at(0, data).unwrap();
+        assert_eq!(written, data.len());
+        // Data is discarded, so we can't verify it, just ensure it doesn't panic
+    }
+
+    #[test]
+    fn test_null_dev_write_offset() {
+        let null = NullDev;
+        let data = b"Test";
+        let written = null.write_at(100, data).unwrap();
+        assert_eq!(written, data.len());
+    }
+
+    #[test]
+    fn test_null_dev_write_empty() {
+        let null = NullDev;
+        let data: &[u8] = &[];
+        let written = null.write_at(0, data).unwrap();
+        assert_eq!(written, 0);
+    }
+
+    #[test]
+    fn test_null_dev_truncate() {
+        let null = NullDev;
+        assert!(null.truncate(0).is_ok());
+        assert!(null.truncate(100).is_ok());
+        assert!(null.truncate(u64::MAX).is_ok());
+    }
+
+    #[test]
+    fn test_null_dev_combined_operations() {
+        let null = NullDev;
+        
+        // Write data
+        let data = b"Test data";
+        null.write_at(0, data).unwrap();
+        
+        // Truncate
+        null.truncate(10).unwrap();
+        
+        // Read should still return 0 bytes
+        let mut buf = [0; 100];
+        let read = null.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 0);
+    }
+}

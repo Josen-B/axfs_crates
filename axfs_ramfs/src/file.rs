@@ -103,3 +103,182 @@ impl VfsNodeOps for FileNode {
 
     impl_vfs_non_dir_default! {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_file_node_new() {
+        let file = FileNode::new();
+        let attr = file.get_attr().unwrap();
+        assert!(attr.is_file());
+        assert_eq!(attr.size(), 0);
+    }
+
+    #[test]
+    fn test_file_node_write_at() {
+        let file = FileNode::new();
+        let data = b"Hello, World!";
+        let written = file.write_at(0, data).unwrap();
+        assert_eq!(written, data.len());
+        assert_eq!(file.get_attr().unwrap().size(), data.len() as u64);
+    }
+
+    #[test]
+    fn test_file_node_write_at_offset() {
+        let file = FileNode::new();
+        let data = b"World!";
+        file.write_at(0, b"Hello, ").unwrap();
+        let written = file.write_at(7, data).unwrap();
+        assert_eq!(written, data.len());
+        
+        let mut buf = [0; 20];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 13);
+        assert_eq!(&buf[..13], b"Hello, World!");
+    }
+
+    #[test]
+    fn test_file_node_read_at_empty() {
+        let file = FileNode::new();
+        let mut buf = [0; 100];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 0);
+    }
+
+    #[test]
+    fn test_file_node_read_at() {
+        let file = FileNode::new();
+        let data = b"Hello, World!";
+        file.write_at(0, data).unwrap();
+        
+        let mut buf = [0; 100];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, data.len());
+        assert_eq!(&buf[..data.len()], data);
+    }
+
+    #[test]
+    fn test_file_node_read_at_partial() {
+        let file = FileNode::new();
+        let data = b"Hello, World!";
+        file.write_at(0, data).unwrap();
+        
+        let mut buf = [0; 5];
+        let read = file.read_at(7, &mut buf).unwrap();
+        assert_eq!(read, 5);
+        assert_eq!(&buf, b"World");
+    }
+
+    #[test]
+    fn test_file_node_read_at_offset() {
+        let file = FileNode::new();
+        let data = b"Hello, World!";
+        file.write_at(0, data).unwrap();
+        
+        let mut buf = [0; 100];
+        let read = file.read_at(7, &mut buf).unwrap();
+        assert_eq!(read, 6);
+        assert_eq!(&buf[..6], b"World!");
+    }
+
+    #[test]
+    fn test_file_node_truncate_shrink() {
+        let file = FileNode::new();
+        file.write_at(0, b"Hello, World!").unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 13);
+        
+        file.truncate(5).unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 5);
+        
+        let mut buf = [0; 100];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 5);
+        assert_eq!(&buf[..5], b"Hello");
+    }
+
+    #[test]
+    fn test_file_node_truncate_grow() {
+        let file = FileNode::new();
+        file.write_at(0, b"Hello").unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 5);
+        
+        file.truncate(10).unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 10);
+        
+        let mut buf = [0; 100];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 10);
+        assert_eq!(&buf[..5], b"Hello");
+        assert_eq!(&buf[5..10], [0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_file_node_truncate_zero() {
+        let file = FileNode::new();
+        file.write_at(0, b"Hello, World!").unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 13);
+        
+        file.truncate(0).unwrap();
+        assert_eq!(file.get_attr().unwrap().size(), 0);
+        
+        let mut buf = [0; 100];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 0);
+    }
+
+    #[test]
+    fn test_file_node_write_extends() {
+        let file = FileNode::new();
+        file.write_at(0, b"Hello").unwrap();
+        file.write_at(10, b"World").unwrap();
+        
+        assert_eq!(file.get_attr().unwrap().size(), 15);
+        
+        let mut buf = [0; 20];
+        let read = file.read_at(0, &mut buf).unwrap();
+        assert_eq!(read, 15);
+        assert_eq!(&buf[..5], b"Hello");
+        assert_eq!(&buf[5..10], [0, 0, 0, 0, 0]);
+        assert_eq!(&buf[10..15], b"World");
+    }
+
+    #[test]
+    fn test_file_node_get_attr() {
+        let file = FileNode::new();
+        let attr = file.get_attr().unwrap();
+        assert!(attr.is_file());
+        assert!(!attr.is_dir());
+        assert_eq!(attr.size(), 0);
+        assert_eq!(attr.blocks(), 0);
+    }
+
+    #[test]
+    fn test_file_node_get_attr_after_write() {
+        let file = FileNode::new();
+        file.write_at(0, b"Hello").unwrap();
+        let attr = file.get_attr().unwrap();
+        assert_eq!(attr.size(), 5);
+    }
+
+    #[test]
+    fn test_file_node_operations_combined() {
+        let file = FileNode::new();
+        
+        // Write data
+        file.write_at(0, b"Hello, ").unwrap();
+        file.write_at(7, b"World!").unwrap();
+        
+        // Read back
+        let mut buf = [0; 20];
+        file.read_at(0, &mut buf).unwrap();
+        assert_eq!(&buf[..13], b"Hello, World!");
+        
+        // Truncate and read
+        file.truncate(5).unwrap();
+        let mut buf2 = [0; 20];
+        file.read_at(0, &mut buf2).unwrap();
+        assert_eq!(&buf2[..5], b"Hello");
+    }
+}

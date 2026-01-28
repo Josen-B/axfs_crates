@@ -99,6 +99,18 @@ impl VfsNodePerm {
     /// # Returns
     ///
     /// A `VfsNodePerm` with the default file permission bits set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axfs_vfs::VfsNodePerm;
+    ///
+    /// let perm = VfsNodePerm::default_file();
+    /// assert!(perm.owner_readable());
+    /// assert!(perm.owner_writable());
+    /// assert!(perm.contains(VfsNodePerm::GROUP_READ));
+    /// assert!(perm.contains(VfsNodePerm::OTHER_READ));
+    /// ```
     pub const fn default_file() -> Self {
         Self::from_bits_truncate(0o666)
     }
@@ -112,6 +124,18 @@ impl VfsNodePerm {
     /// # Returns
     ///
     /// A `VfsNodePerm` with the default directory permission bits set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axfs_vfs::VfsNodePerm;
+    ///
+    /// let perm = VfsNodePerm::default_dir();
+    /// assert!(perm.owner_readable());
+    /// assert!(perm.owner_executable());
+    /// assert!(perm.contains(VfsNodePerm::GROUP_READ));
+    /// assert!(perm.contains(VfsNodePerm::OTHER_READ));
+    /// ```
     pub const fn default_dir() -> Self {
         Self::from_bits_truncate(0o755)
     }
@@ -280,6 +304,16 @@ impl VfsNodeType {
     /// # Returns
     ///
     /// A single character representing the node type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axfs_vfs::VfsNodeType;
+    ///
+    /// assert_eq!(VfsNodeType::File.as_char(), '-');
+    /// assert_eq!(VfsNodeType::Dir.as_char(), 'd');
+    /// assert_eq!(VfsNodeType::SymLink.as_char(), 'l');
+    /// ```
     pub const fn as_char(self) -> char {
         match self {
             Self::Fifo => 'p',
@@ -455,6 +489,16 @@ impl VfsDirEntry {
     /// # Returns
     ///
     /// A new `VfsDirEntry` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use axfs_vfs::{VfsDirEntry, VfsNodeType};
+    ///
+    /// let entry = VfsDirEntry::new("test.txt", VfsNodeType::File);
+    /// assert_eq!(entry.entry_type(), VfsNodeType::File);
+    /// assert_eq!(entry.name_as_bytes(), b"test.txt");
+    /// ```
     pub fn new(name: &str, ty: VfsNodeType) -> Self {
         let mut d_name = [0; 63];
         if name.len() > d_name.len() {
@@ -491,5 +535,244 @@ impl VfsDirEntry {
             .position(|&c| c == 0)
             .unwrap_or(self.d_name.len());
         &self.d_name[..len]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // VfsNodePerm tests
+    #[test]
+    fn test_perm_default_file() {
+        let perm = VfsNodePerm::default_file();
+        assert!(perm.owner_readable());
+        assert!(perm.owner_writable());
+        assert!(!perm.owner_executable());
+        assert!(perm.contains(VfsNodePerm::GROUP_READ));
+        assert!(perm.contains(VfsNodePerm::GROUP_WRITE));
+        assert!(!perm.contains(VfsNodePerm::GROUP_EXEC));
+        assert!(perm.contains(VfsNodePerm::OTHER_READ));
+        assert!(perm.contains(VfsNodePerm::OTHER_WRITE));
+        assert!(!perm.contains(VfsNodePerm::OTHER_EXEC));
+    }
+
+    #[test]
+    fn test_perm_default_dir() {
+        let perm = VfsNodePerm::default_dir();
+        assert!(perm.owner_readable());
+        assert!(perm.owner_writable());
+        assert!(perm.owner_executable());
+        assert!(perm.contains(VfsNodePerm::GROUP_READ));
+        assert!(!perm.contains(VfsNodePerm::GROUP_WRITE));
+        assert!(perm.contains(VfsNodePerm::GROUP_EXEC));
+        assert!(perm.contains(VfsNodePerm::OTHER_READ));
+        assert!(!perm.contains(VfsNodePerm::OTHER_WRITE));
+        assert!(perm.contains(VfsNodePerm::OTHER_EXEC));
+    }
+
+    #[test]
+    fn test_perm_mode() {
+        let perm = VfsNodePerm::default_file();
+        assert_eq!(perm.mode(), 0o666u32);
+    }
+
+    #[test]
+    fn test_perm_rwx_buf() {
+        let perm = VfsNodePerm::default_file();
+        let buf = perm.rwx_buf();
+        assert_eq!(&buf[..], b"rw-rw-rw-");
+
+        let perm = VfsNodePerm::default_dir();
+        let buf = perm.rwx_buf();
+        assert_eq!(&buf[..], b"rwxr-xr-x");
+
+        let perm = VfsNodePerm::empty();
+        let buf = perm.rwx_buf();
+        assert_eq!(&buf[..], b"---------");
+    }
+
+    #[test]
+    fn test_perm_owner_checks() {
+        let perm = VfsNodePerm::OWNER_READ | VfsNodePerm::OWNER_WRITE | VfsNodePerm::OWNER_EXEC;
+        assert!(perm.owner_readable());
+        assert!(perm.owner_writable());
+        assert!(perm.owner_executable());
+
+        let perm = VfsNodePerm::GROUP_READ | VfsNodePerm::GROUP_WRITE;
+        assert!(!perm.owner_readable());
+        assert!(!perm.owner_writable());
+        assert!(!perm.owner_executable());
+    }
+
+    // VfsNodeType tests
+    #[test]
+    fn test_node_type_is_file() {
+        assert!(VfsNodeType::File.is_file());
+        assert!(!VfsNodeType::Dir.is_file());
+        assert!(!VfsNodeType::SymLink.is_file());
+    }
+
+    #[test]
+    fn test_node_type_is_dir() {
+        assert!(VfsNodeType::Dir.is_dir());
+        assert!(!VfsNodeType::File.is_dir());
+        assert!(!VfsNodeType::SymLink.is_dir());
+    }
+
+    #[test]
+    fn test_node_type_is_symlink() {
+        assert!(VfsNodeType::SymLink.is_symlink());
+        assert!(!VfsNodeType::File.is_symlink());
+        assert!(!VfsNodeType::Dir.is_symlink());
+    }
+
+    #[test]
+    fn test_node_type_is_block_device() {
+        assert!(VfsNodeType::BlockDevice.is_block_device());
+        assert!(!VfsNodeType::File.is_block_device());
+    }
+
+    #[test]
+    fn test_node_type_is_char_device() {
+        assert!(VfsNodeType::CharDevice.is_char_device());
+        assert!(!VfsNodeType::File.is_char_device());
+    }
+
+    #[test]
+    fn test_node_type_is_fifo() {
+        assert!(VfsNodeType::Fifo.is_fifo());
+        assert!(!VfsNodeType::File.is_fifo());
+    }
+
+    #[test]
+    fn test_node_type_is_socket() {
+        assert!(VfsNodeType::Socket.is_socket());
+        assert!(!VfsNodeType::File.is_socket());
+    }
+
+    #[test]
+    fn test_node_type_as_char() {
+        assert_eq!(VfsNodeType::Fifo.as_char(), 'p');
+        assert_eq!(VfsNodeType::CharDevice.as_char(), 'c');
+        assert_eq!(VfsNodeType::Dir.as_char(), 'd');
+        assert_eq!(VfsNodeType::BlockDevice.as_char(), 'b');
+        assert_eq!(VfsNodeType::File.as_char(), '-');
+        assert_eq!(VfsNodeType::SymLink.as_char(), 'l');
+        assert_eq!(VfsNodeType::Socket.as_char(), 's');
+    }
+
+    // VfsNodeAttr tests
+    #[test]
+    fn test_node_attr_new() {
+        let perm = VfsNodePerm::OWNER_READ | VfsNodePerm::OWNER_WRITE;
+        let attr = VfsNodeAttr::new(perm, VfsNodeType::File, 1024, 8);
+        assert!(attr.perm().contains(VfsNodePerm::OWNER_READ));
+        assert!(attr.perm().contains(VfsNodePerm::OWNER_WRITE));
+        assert_eq!(attr.file_type(), VfsNodeType::File);
+        assert_eq!(attr.size(), 1024);
+        assert_eq!(attr.blocks(), 8);
+    }
+
+    #[test]
+    fn test_node_attr_new_file() {
+        let attr = VfsNodeAttr::new_file(2048, 16);
+        assert_eq!(attr.file_type(), VfsNodeType::File);
+        assert_eq!(attr.size(), 2048);
+        assert_eq!(attr.blocks(), 16);
+        assert!(attr.perm().owner_readable());
+        assert!(attr.perm().owner_writable());
+        assert!(attr.perm().contains(VfsNodePerm::GROUP_READ));
+        assert!(attr.perm().contains(VfsNodePerm::GROUP_WRITE));
+        assert!(attr.perm().contains(VfsNodePerm::OTHER_READ));
+        assert!(attr.perm().contains(VfsNodePerm::OTHER_WRITE));
+    }
+
+    #[test]
+    fn test_node_attr_new_dir() {
+        let attr = VfsNodeAttr::new_dir(512, 4);
+        assert_eq!(attr.file_type(), VfsNodeType::Dir);
+        assert_eq!(attr.size(), 512);
+        assert_eq!(attr.blocks(), 4);
+        assert!(attr.perm().owner_readable());
+        assert!(attr.perm().owner_writable());
+        assert!(attr.perm().owner_executable());
+        assert!(attr.perm().contains(VfsNodePerm::GROUP_READ));
+        assert!(attr.perm().contains(VfsNodePerm::GROUP_EXEC));
+        assert!(attr.perm().contains(VfsNodePerm::OTHER_READ));
+        assert!(attr.perm().contains(VfsNodePerm::OTHER_EXEC));
+    }
+
+    #[test]
+    fn test_node_attr_is_file() {
+        let attr = VfsNodeAttr::new_file(100, 1);
+        assert!(attr.is_file());
+        assert!(!attr.is_dir());
+    }
+
+    #[test]
+    fn test_node_attr_is_dir() {
+        let attr = VfsNodeAttr::new_dir(100, 1);
+        assert!(attr.is_dir());
+        assert!(!attr.is_file());
+    }
+
+    #[test]
+    fn test_node_attr_set_perm() {
+        let mut attr = VfsNodeAttr::new_file(100, 1);
+        let new_perm = VfsNodePerm::OWNER_READ | VfsNodePerm::OWNER_EXEC;
+        attr.set_perm(new_perm);
+        assert!(attr.perm().contains(VfsNodePerm::OWNER_READ));
+        assert!(attr.perm().contains(VfsNodePerm::OWNER_EXEC));
+        assert!(!attr.perm().contains(VfsNodePerm::OWNER_WRITE));
+    }
+
+    // VfsDirEntry tests
+    #[test]
+    fn test_dir_entry_default() {
+        let entry = VfsDirEntry::default();
+        assert_eq!(entry.entry_type(), VfsNodeType::File);
+        assert_eq!(entry.name_as_bytes().len(), 0);
+    }
+
+    #[test]
+    fn test_dir_entry_new_short_name() {
+        let entry = VfsDirEntry::new("test.txt", VfsNodeType::File);
+        assert_eq!(entry.entry_type(), VfsNodeType::File);
+        assert_eq!(entry.name_as_bytes(), b"test.txt");
+    }
+
+    #[test]
+    fn test_dir_entry_new_exact_63() {
+        let name = "a".repeat(63);
+        let entry = VfsDirEntry::new(&name, VfsNodeType::Dir);
+        assert_eq!(entry.entry_type(), VfsNodeType::Dir);
+        assert_eq!(entry.name_as_bytes().len(), 63);
+    }
+
+    #[test]
+    fn test_dir_entry_new_long_name() {
+        // 创建一个恰好63字节的名称
+        let name = "a".repeat(63);
+        let entry = VfsDirEntry::new(&name, VfsNodeType::File);
+        assert_eq!(entry.entry_type(), VfsNodeType::File);
+        assert_eq!(entry.name_as_bytes().len(), 63);
+        assert!(entry.name_as_bytes().iter().all(|&b| b == b'a'));
+    }
+
+    #[test]
+    fn test_dir_entry_name_as_bytes_with_null() {
+        let entry = VfsDirEntry::new("hello", VfsNodeType::File);
+        // d_name 应该包含 null 终止符
+        assert_eq!(entry.d_name[5], 0);
+        // name_as_bytes 应该只返回实际名称
+        assert_eq!(entry.name_as_bytes(), b"hello");
+    }
+
+    #[test]
+    fn test_dir_entry_empty_name() {
+        let entry = VfsDirEntry::new("", VfsNodeType::File);
+        assert_eq!(entry.name_as_bytes().len(), 0);
+        assert_eq!(entry.entry_type(), VfsNodeType::File);
     }
 }
