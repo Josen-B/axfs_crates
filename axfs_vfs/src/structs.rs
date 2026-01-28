@@ -752,7 +752,7 @@ mod tests {
 
     #[test]
     fn test_dir_entry_new_long_name() {
-        // 创建一个恰好63字节的名称
+        // Create a name that is exactly 63 bytes long
         let name = "a".repeat(63);
         let entry = VfsDirEntry::new(&name, VfsNodeType::File);
         assert_eq!(entry.entry_type(), VfsNodeType::File);
@@ -763,9 +763,9 @@ mod tests {
     #[test]
     fn test_dir_entry_name_as_bytes_with_null() {
         let entry = VfsDirEntry::new("hello", VfsNodeType::File);
-        // d_name 应该包含 null 终止符
+        // d_name should contain null terminator
         assert_eq!(entry.d_name[5], 0);
-        // name_as_bytes 应该只返回实际名称
+        // name_as_bytes should only return the actual name
         assert_eq!(entry.name_as_bytes(), b"hello");
     }
 
