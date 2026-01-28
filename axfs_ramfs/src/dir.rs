@@ -400,7 +400,10 @@ mod tests {
     #[test]
     fn test_dir_node_remove_not_found() {
         let dir = DirNode::new(None);
-        assert_eq!(dir.remove_node("nonexistent").err(), Some(VfsError::NotFound));
+        assert_eq!(
+            dir.remove_node("nonexistent").err(),
+            Some(VfsError::NotFound)
+        );
     }
 
     #[test]
@@ -409,7 +412,7 @@ mod tests {
         assert!(dir.create_node("f1", VfsNodeType::File).is_ok());
         assert!(dir.create_node("f2", VfsNodeType::File).is_ok());
         assert!(dir.create_node("d1", VfsNodeType::Dir).is_ok());
-        
+
         let entries = dir.get_entries();
         assert_eq!(entries.len(), 3);
         assert!(entries.contains(&"f1".to_string()));
@@ -458,7 +461,9 @@ mod tests {
         // Create intermediate directory first
         assert!(dir.create("subdir", VfsNodeType::Dir).is_ok());
         assert!(dir.create("subdir/nested", VfsNodeType::Dir).is_ok());
-        assert!(dir.create("subdir/nested/file.txt", VfsNodeType::File).is_ok());
+        assert!(dir
+            .create("subdir/nested/file.txt", VfsNodeType::File)
+            .is_ok());
         assert!(dir.exist("subdir"));
     }
 
@@ -467,15 +472,15 @@ mod tests {
         let dir = DirNode::new(None);
         assert!(dir.create_node("f1", VfsNodeType::File).is_ok());
         assert!(dir.create_node("f2", VfsNodeType::Dir).is_ok());
-        
+
         let mut entries: Vec<VfsDirEntry> = (0..10).map(|_| VfsDirEntry::default()).collect();
         let count = dir.read_dir(0, &mut entries).unwrap();
         assert!(count >= 3); // ., .., f1, f2
-        
+
         // First entry should be "."
         assert_eq!(entries[0].name_as_bytes(), b".");
         assert_eq!(entries[0].entry_type(), VfsNodeType::Dir);
-        
+
         // Second entry should be ".."
         assert_eq!(entries[1].name_as_bytes(), b"..");
         assert_eq!(entries[1].entry_type(), VfsNodeType::Dir);

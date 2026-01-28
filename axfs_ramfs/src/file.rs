@@ -132,7 +132,7 @@ mod tests {
         file.write_at(0, b"Hello, ").unwrap();
         let written = file.write_at(7, data).unwrap();
         assert_eq!(written, data.len());
-        
+
         let mut buf = [0; 20];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, 13);
@@ -152,7 +152,7 @@ mod tests {
         let file = FileNode::new();
         let data = b"Hello, World!";
         file.write_at(0, data).unwrap();
-        
+
         let mut buf = [0; 100];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, data.len());
@@ -164,7 +164,7 @@ mod tests {
         let file = FileNode::new();
         let data = b"Hello, World!";
         file.write_at(0, data).unwrap();
-        
+
         let mut buf = [0; 5];
         let read = file.read_at(7, &mut buf).unwrap();
         assert_eq!(read, 5);
@@ -176,7 +176,7 @@ mod tests {
         let file = FileNode::new();
         let data = b"Hello, World!";
         file.write_at(0, data).unwrap();
-        
+
         let mut buf = [0; 100];
         let read = file.read_at(7, &mut buf).unwrap();
         assert_eq!(read, 6);
@@ -188,10 +188,10 @@ mod tests {
         let file = FileNode::new();
         file.write_at(0, b"Hello, World!").unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 13);
-        
+
         file.truncate(5).unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 5);
-        
+
         let mut buf = [0; 100];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, 5);
@@ -203,10 +203,10 @@ mod tests {
         let file = FileNode::new();
         file.write_at(0, b"Hello").unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 5);
-        
+
         file.truncate(10).unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 10);
-        
+
         let mut buf = [0; 100];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, 10);
@@ -219,10 +219,10 @@ mod tests {
         let file = FileNode::new();
         file.write_at(0, b"Hello, World!").unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 13);
-        
+
         file.truncate(0).unwrap();
         assert_eq!(file.get_attr().unwrap().size(), 0);
-        
+
         let mut buf = [0; 100];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, 0);
@@ -233,9 +233,9 @@ mod tests {
         let file = FileNode::new();
         file.write_at(0, b"Hello").unwrap();
         file.write_at(10, b"World").unwrap();
-        
+
         assert_eq!(file.get_attr().unwrap().size(), 15);
-        
+
         let mut buf = [0; 20];
         let read = file.read_at(0, &mut buf).unwrap();
         assert_eq!(read, 15);
@@ -265,16 +265,16 @@ mod tests {
     #[test]
     fn test_file_node_operations_combined() {
         let file = FileNode::new();
-        
+
         // Write data
         file.write_at(0, b"Hello, ").unwrap();
         file.write_at(7, b"World!").unwrap();
-        
+
         // Read back
         let mut buf = [0; 20];
         file.read_at(0, &mut buf).unwrap();
         assert_eq!(&buf[..13], b"Hello, World!");
-        
+
         // Truncate and read
         file.truncate(5).unwrap();
         let mut buf2 = [0; 20];

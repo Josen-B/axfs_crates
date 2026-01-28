@@ -160,14 +160,14 @@ mod tests {
     #[test]
     fn test_zero_dev_combined_operations() {
         let zero = ZeroDev;
-        
+
         // Write data (discarded)
         let data = b"Test data";
         zero.write_at(0, data).unwrap();
-        
+
         // Truncate
         zero.truncate(10).unwrap();
-        
+
         // Read should return zeros
         let mut buf = [1; 50];
         let read = zero.read_at(0, &mut buf).unwrap();

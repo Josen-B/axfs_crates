@@ -150,14 +150,14 @@ mod tests {
     #[test]
     fn test_null_dev_combined_operations() {
         let null = NullDev;
-        
+
         // Write data
         let data = b"Test data";
         null.write_at(0, data).unwrap();
-        
+
         // Truncate
         null.truncate(10).unwrap();
-        
+
         // Read should still return 0 bytes
         let mut buf = [0; 100];
         let read = null.read_at(0, &mut buf).unwrap();

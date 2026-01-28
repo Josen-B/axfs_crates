@@ -186,12 +186,12 @@ mod tests {
     fn test_urandom_next_u64_deterministic() {
         let urandom1 = UrandomDev::new(12345);
         let urandom2 = UrandomDev::new(12345);
-        
+
         // Same seed should produce same sequence
         let v1_1 = urandom1.next_u64();
         let v2_1 = urandom2.next_u64();
         assert_eq!(v1_1, v2_1);
-        
+
         let v1_2 = urandom1.next_u64();
         let v2_2 = urandom2.next_u64();
         assert_eq!(v1_2, v2_2);
@@ -241,13 +241,13 @@ mod tests {
     fn test_urandom_read_deterministic() {
         let urandom1 = UrandomDev::new(12345);
         let urandom2 = UrandomDev::new(12345);
-        
+
         let mut buf1 = [0; 100];
         let mut buf2 = [0; 100];
-        
+
         urandom1.read_at(0, &mut buf1).unwrap();
         urandom2.read_at(0, &mut buf2).unwrap();
-        
+
         // Same seed should produce same random sequence
         assert_eq!(buf1, buf2);
     }
@@ -288,19 +288,19 @@ mod tests {
     #[test]
     fn test_urandom_combined_operations() {
         let urandom = UrandomDev::new(12345);
-        
+
         // Write data (discarded)
         let data = b"Test data";
         urandom.write_at(0, data).unwrap();
-        
+
         // Truncate
         urandom.truncate(10).unwrap();
-        
+
         // Read should return random data
         let mut buf1 = [0; 50];
         let read = urandom.read_at(0, &mut buf1).unwrap();
         assert_eq!(read, 50);
-        
+
         let all_zeros = buf1.iter().all(|&b| b == 0);
         assert!(!all_zeros);
     }
